@@ -22,16 +22,17 @@ def is_image_file(filename):
 
 
 def make_dataset(dir):
-    images = []
+    base_images = []
     assert os.path.isdir(dir), '%s is not a valid directory' % dir
 
-    for root, _, fnames in sorted(os.walk(dir)):
-        for fname in fnames:
-            if is_image_file(fname):
-                path = os.path.join(root, fname)
-                images.append(path)
+    for product in sorted(os.listdir(dir)):
+        for color in sorted(os.listdir(os.path.join(dir, product))):
+            for file in sorted(os.listdir(os.path.join(dir, product, color))):
+                path = os.path.join(dir, product, color, file)
+                if is_image_file(path):
+                    base_images.append(path)
 
-    return images
+    return base_images
 
 
 def default_loader(path):

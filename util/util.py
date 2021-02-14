@@ -58,3 +58,24 @@ def mkdirs(paths):
 def mkdir(path):
     if not os.path.exists(path):
         os.makedirs(path)
+
+def expand2square(pil_img, background_color_num):
+    # back ground color example (0, 0, 0)
+    width, height = pil_img.size
+    if pil_img.mode == 'RGB':
+        background_color = (background_color_num, background_color_num, background_color_num)
+    elif pil_img.mode == "L":
+        background_color = background_color_num
+    else :
+        assert('please let input "RGB" or "L"')
+    if width == height:
+        return pil_img
+    elif width > height:
+        result = Image.new(pil_img.mode, (width, width), background_color)
+        result.paste(pil_img, (0, (width - height) // 2))
+        return result
+    else:
+        result = Image.new(pil_img.mode, (height, height), background_color)
+        result.paste(pil_img, ((height - width) // 2, 0))
+        return result
+
