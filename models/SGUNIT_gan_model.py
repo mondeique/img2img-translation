@@ -3,11 +3,12 @@ import itertools
 from util.image_pool import ImagePool
 from .base_model import BaseModel
 from . import networks
+from util.gramMatrix import StyleLoss
 
 
-class CycleGANModel(BaseModel):
+class SGUNITGANModel(BaseModel):
     def name(self):
-        return 'CycleGANModel'
+        return 'SGUNITGANModel'
 
     @staticmethod
     def modify_commandline_options(parser, is_train=True):
@@ -24,7 +25,7 @@ class CycleGANModel(BaseModel):
         BaseModel.initialize(self, opt)
 
         # specify the training losses you want to print out. The program will call base_model.get_current_losses
-        self.loss_names = ['D_A', 'G_A', 'cycle_A', 'sty_A', 'D_B', 'G_B', 'cycle_B', 'sty_B']
+        self.loss_names = ['D_A', 'G_A', 'cycle_A', 'idt_A', 'D_B', 'G_B', 'cycle_B', 'idt_B', 'sty']
         # specify the images you want to save/display. The program will call base_model.get_current_visuals
         visual_names_A = ['real_A', 'fake_B', 'rec_A']
         visual_names_B = ['real_B', 'fake_A', 'rec_B']
@@ -60,8 +61,8 @@ class CycleGANModel(BaseModel):
             # define loss functions
             self.criterionGAN = networks.GANLoss(use_lsgan=not opt.no_lsgan).to(self.device)
             self.criterionCycle = torch.nn.L1Loss()
-            # TODO : Style Loss 정의
-            self.criterionSty = torch.nn.L1Loss()
+            self.criterionIdt = torch.nn.L1Loss()
+            self.criterionSty = StyleLoss()
             # initialize optimizers
             self.optimizer_G = torch.optim.Adam(itertools.chain(self.netG_A.parameters(), self.netG_B.parameters()),
                                                 lr=opt.lr, betas=(opt.beta1, 0.999))
@@ -75,14 +76,15 @@ class CycleGANModel(BaseModel):
         AtoB = self.opt.direction == 'AtoB'
         self.real_A = input['A' if AtoB else 'B'].to(self.device)
         self.real_B = input['B' if AtoB else 'A'].to(self.device)
+        self.real_a = input['a' if AtoB else 'b'].to(self.device)
         self.image_paths = input['A_paths' if AtoB else 'B_paths']
 
     def forward(self):
-        self.fake_B = self.netG_A(self.real_A)
-        self.rec_A = self.netG_B(self.fake_B)
+        self.fake_b = self.netG_A(self.real_A, self.real_B, self.real_a)
+        self.rec_a = self.netG_B(self.real_A, self.real_B, self.fake_b)
 
-        self.fake_A = self.netG_B(self.real_B)
-        self.rec_B = self.netG_A(self.fake_A)
+        # self.fake_A = self.netG_B(self.real_B)
+        # self.rec_B = self.netG_A(self.fake_A)
 
     def backward_D_basic(self, netD, real, fake):
         # Real
@@ -98,12 +100,12 @@ class CycleGANModel(BaseModel):
         return loss_D
 
     def backward_D_A(self):
-        fake_B = self.fake_B_pool.query(self.fake_B)
-        self.loss_D_A = self.backward_D_basic(self.netD_A, self.real_B, fake_B)
+        rec_a = self.fake_B_pool.query(self.rec_a)
+        self.loss_D_A = self.backward_D_basic(self.netD_A, self.real_a, rec_a)
 
-    def backward_D_B(self):
-        fake_A = self.fake_A_pool.query(self.fake_A)
-        self.loss_D_B = self.backward_D_basic(self.netD_B, self.real_A, fake_A)
+    # def backward_D_B(self):
+    #     fake_A = self.fake_A_pool.query(self.fake_A)
+    #     self.loss_D_B = self.backward_D_basic(self.netD_B, self.real_A, fake_A)
 
     def backward_G(self):
         lambda_idt = self.opt.lambda_identity
@@ -120,17 +122,21 @@ class CycleGANModel(BaseModel):
         else:
             self.loss_idt_A = 0
             self.loss_idt_B = 0
+        # Style loss
+        self.loss_sty = StyleLoss(self.real_a) - StyleLoss(self.fake_b) - StyleLoss(self.real_A) - StyleLoss(self.real_B)
+        + StyleLoss(self.real_B) - StyleLoss(self.fake_b) - StyleLoss(self.real_A) - StyleLoss(self.rec_a)
 
         # GAN loss D_A(G_A(A))
-        self.loss_G_A = self.criterionGAN(self.netD_A(self.fake_B), True)
+        self.loss_G_A = self.criterionGAN(self.netD_A(self.fake_b), True)
         # GAN loss D_B(G_B(B))
-        self.loss_G_B = self.criterionGAN(self.netD_B(self.fake_A), True)
+        self.loss_G_B = self.criterionGAN(self.netD_B(self.rec_a), True)
         # Forward cycle loss
-        self.loss_cycle_A = self.criterionCycle(self.rec_A, self.real_A) * lambda_A
-        # Backward cycle loss
-        self.loss_cycle_B = self.criterionCycle(self.rec_B, self.real_B) * lambda_B
+        self.loss_cycle_A = self.criterionCycle(self.rec_a, self.real_a) * lambda_A
+        # # Backward cycle loss
+        # self.loss_cycle_B = self.criterionCycle(self.rec_B, self.real_B) * lambda_B
+
         # combined loss
-        self.loss_G = self.loss_G_A + self.loss_G_B + self.loss_cycle_A + self.loss_cycle_B + self.loss_idt_A + self.loss_idt_B
+        self.loss_G = self.loss_G_A + self.loss_G_B + self.loss_cycle_A + self.loss_idt_A + self.loss_idt_B + self.loss_sty
         self.loss_G.backward()
 
     def optimize_parameters(self):
@@ -145,5 +151,5 @@ class CycleGANModel(BaseModel):
         self.set_requires_grad([self.netD_A, self.netD_B], True)
         self.optimizer_D.zero_grad()
         self.backward_D_A()
-        self.backward_D_B()
+        # self.backward_D_B()
         self.optimizer_D.step()
