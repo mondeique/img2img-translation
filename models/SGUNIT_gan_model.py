@@ -74,14 +74,20 @@ class SGUNITGANModel(BaseModel):
 
     def set_input(self, input):
         AtoB = self.opt.direction == 'AtoB'
-        self.real_A = input['A' if AtoB else 'B'].to(self.device)
-        self.real_B = input['B' if AtoB else 'A'].to(self.device)
-        self.real_a = input['a' if AtoB else 'b'].to(self.device)
-        self.image_paths = input['A_paths' if AtoB else 'B_paths']
+        self.real_image = input['base_image' if AtoB else 'B'].to(self.device)
+        self.real_image_mask = input['base_image_mask' if AtoB else 'A'].to(self.device)
+        self.real_cloth = input['base_cloth' if AtoB else 'A'].to(self.device)
+        self.real_cloth_mask = input['base_cloth_mask' if AtoB else 'A'].to(self.device)
+        self.input_cloth = input['input_cloth' if AtoB else 'A'].to(self.device)
+        self.input_cloth_mask = input['input_cloth_mask' if AtoB else 'b'].to(self.device)
+        # self.image_paths = input['A_paths' if AtoB else 'B_paths']
 
     def forward(self):
-        self.fake_b = self.netG_A(self.real_A, self.real_B, self.real_a)
-        self.rec_a = self.netG_B(self.real_A, self.real_B, self.fake_b)
+        self.image_mask = self.real_image.mul(self.real_image_mask)
+        self.cloth_mask = self.real_cloth.mul(self.real_cloth_mask)
+        self.input_mask = self.input_cloth.mul(self.input_cloth_mask)
+        self.fake_image = self.netG_A(self.real_image, self.real_cloth, self.input_cloth)
+        self.rec_image = self.netG_B(self.real_cloth, self.input_cloth, self.fake_image)
 
         # self.fake_A = self.netG_B(self.real_B)
         # self.rec_B = self.netG_A(self.fake_A)
@@ -100,8 +106,8 @@ class SGUNITGANModel(BaseModel):
         return loss_D
 
     def backward_D_A(self):
-        rec_a = self.fake_B_pool.query(self.rec_a)
-        self.loss_D_A = self.backward_D_basic(self.netD_A, self.real_a, rec_a)
+        rec_image = self.fake_B_pool.query(self.rec_image)
+        self.loss_D_A = self.backward_D_basic(self.netD_A, self.real_image, rec_image)
 
     # def backward_D_B(self):
     #     fake_A = self.fake_A_pool.query(self.fake_A)
@@ -112,31 +118,31 @@ class SGUNITGANModel(BaseModel):
         lambda_A = self.opt.lambda_A
         lambda_B = self.opt.lambda_B
         # Identity loss
-        if lambda_idt > 0:
-            # G_A should be identity if real_B is fed.
-            self.idt_A = self.netG_A(self.real_B)
-            self.loss_idt_A = self.criterionIdt(self.idt_A, self.real_B) * lambda_B * lambda_idt
-            # G_B should be identity if real_A is fed.
-            self.idt_B = self.netG_B(self.real_A)
-            self.loss_idt_B = self.criterionIdt(self.idt_B, self.real_A) * lambda_A * lambda_idt
-        else:
-            self.loss_idt_A = 0
-            self.loss_idt_B = 0
+        # if lambda_idt > 0:
+        #    # G_A should be identity if real_B is fed.
+        #    self.idt_A = self.netG_A(self.real_B)
+        #    self.loss_idt_A = self.criterionIdt(self.idt_A, self.real_B) * lambda_B * lambda_idt
+        #    # G_B should be identity if real_A is fed.
+        #    self.idt_B = self.netG_B(self.real_A)
+        #    self.loss_idt_B = self.criterionIdt(self.idt_B, self.real_A) * lambda_A * lambda_idt
+        #else:
+        #    self.loss_idt_A = 0
+        #    self.loss_idt_B = 0
         # Style loss
-        self.loss_sty = StyleLoss(self.real_a) - StyleLoss(self.fake_b) - StyleLoss(self.real_A) - StyleLoss(self.real_B)
-        + StyleLoss(self.real_B) - StyleLoss(self.fake_b) - StyleLoss(self.real_A) - StyleLoss(self.rec_a)
+        self.loss_sty = StyleLoss(self.real_image) - StyleLoss(self.image_mask) - StyleLoss(self.real_cloth) - StyleLoss(self.cloth_mask)
+        + StyleLoss(self.real_image) - StyleLoss(self.real_cloth) - StyleLoss(self.image_mask) - StyleLoss(self.cloth_mask)
 
         # GAN loss D_A(G_A(A))
-        self.loss_G_A = self.criterionGAN(self.netD_A(self.fake_b), True)
+        self.loss_G_A = self.criterionGAN(self.netD_A(self.fake_image), True)
         # GAN loss D_B(G_B(B))
-        self.loss_G_B = self.criterionGAN(self.netD_B(self.rec_a), True)
+        self.loss_G_B = self.criterionGAN(self.netD_B(self.rec_image), True)
         # Forward cycle loss
-        self.loss_cycle_A = self.criterionCycle(self.rec_a, self.real_a) * lambda_A
+        self.loss_cycle_A = self.criterionCycle(self.real_image, self.rec_image) * lambda_A
         # # Backward cycle loss
         # self.loss_cycle_B = self.criterionCycle(self.rec_B, self.real_B) * lambda_B
 
         # combined loss
-        self.loss_G = self.loss_G_A + self.loss_G_B + self.loss_cycle_A + self.loss_idt_A + self.loss_idt_B + self.loss_sty
+        self.loss_G = self.loss_G_A + self.loss_G_B + self.loss_cycle_A + self.loss_sty
         self.loss_G.backward()
 
     def optimize_parameters(self):

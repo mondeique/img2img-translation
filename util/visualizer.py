@@ -5,7 +5,7 @@ import ntpath
 import time
 from . import util
 from . import html
-from scipy.misc import imresize
+import cv2
 
 if sys.version_info[0] == 2:
     VisdomExceptionBase = Exception
