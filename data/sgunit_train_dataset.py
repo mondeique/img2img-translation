@@ -74,4 +74,4 @@ class TrainDataset(BaseDataset):
         return len(self.AB_paths)
 
     def name(self):
-        return 'AlignedDataset'
+        return 'SGUNITTrainDataset'
