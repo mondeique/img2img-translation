@@ -2,6 +2,13 @@
 .DS_Store
 .idea/
 
+# Image File
+data/dataset
+data/raw_data
+
+# checkpoints
+checkpoints/
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]

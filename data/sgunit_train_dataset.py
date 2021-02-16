@@ -8,7 +8,7 @@ from PIL import Image
 import util.util as util
 
 
-class TrainDataset(BaseDataset):
+class sgunittraindataset(BaseDataset):
     @staticmethod
     def modify_commandline_options(parser, is_train):
         return parser
@@ -16,24 +16,24 @@ class TrainDataset(BaseDataset):
     def make_data_bundles(self, base_image_path):
         path_bundles = []
         for base_path in base_image_path:
-            product_path = os.path.join(base_image_path, base_path)
+            # product_path = os.path.join(base_image_path, base_path)
             components = base_path.split('/')
             # components = [root,images,base,pXXX,cXXX,XXX]
-            base_cloth_path = os.path.join(self.dir_clothes, components[-3])
+            base_cloth_path = os.path.join(self.dir_clothes, 'base',components[-3])
             for color in os.listdir(base_cloth_path):
                 if color[:-4] != components[-2]:
                     path_bundles.append({
                         'base_image' : base_path,
-                        'base_image_mask' : os.path.join(self.root, 'images', 'mask', components[-3], components[-2], components[-1]),
-                        'base_cloth' : os.path.join(self.dir_clothes, 'base', components[-3], f'{components[-2]}.jpg'),
-                        'base_cloth_mask' : os.path.join(self.dir_clothes, 'mask', components[-3], f'{components[-2]}.jpg'),
+                        'base_image_mask' : os.path.join(self.root, 'images', 'mask', components[-3], components[-2], components[-1][:-4] + '_mask.png'),
+                        'base_cloth' : os.path.join(self.dir_clothes, 'base', components[-3], f'{components[-2]}'),
+                        'base_cloth_mask' : os.path.join(self.dir_clothes, 'mask', components[-3], f'{components[-2]}_mask.png'),
                         'input_cloth' : os.path.join(self.dir_clothes, 'base', components[-3], f'{color}'),
-                        'input_cloth_mask' : os.path.join(self.dir_clothes, 'mask', components[-3], f'{color}')
+                        'input_cloth_mask' : os.path.join(self.dir_clothes, 'mask', components[-3], f'{color}_mask.png')
                     })
 
         return path_bundles
 
-    def initialize(self, opt):
+    def __init__(self, opt):
         self.opt = opt
         self.batch_size = opt.batch_size
         self.root = opt.dataroot
@@ -59,19 +59,21 @@ class TrainDataset(BaseDataset):
         #
         # image_list = [base_image, base_image_mask, base_cloth, base_cloth_mask, input_cloth, input_cloth_mask]
         resized_image_dict = {}
-        for key, image in enumerate(train_path):
+        for key, image in train_path.items():
             if 'mask' in key:
+                image = Image.open(image).convert("L")
                 new_image = util.expand2square(image, 0)
-            else :
+            else:
+                image = Image.open(image).convert("RGB")
                 new_image = util.expand2square(image, 255)
-            new_image.resize((self.opt.loadSize, self.opt.loadSize), Image.BICUBIC)
+            new_image = new_image.resize((self.opt.loadSize, self.opt.loadSize), Image.LANCZOS)
             new_image = transforms.ToTensor()(new_image)
             resized_image_dict[key] = new_image
 
         return resized_image_dict
 
     def __len__(self):
-        return len(self.AB_paths)
+        return len(self.train_data_bundle_paths)
 
     def name(self):
         return 'SGUNITTrainDataset'

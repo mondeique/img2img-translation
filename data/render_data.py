@@ -27,8 +27,8 @@ def filter_upper_clothes(image):
     image_array = np.asarray(image)
     b = (image_array == 5)
     c = b.astype(int)
-    c[c != 1] = 255
-    c[c == 1] = 0
+    c[c != 1] = 0
+    c[c == 1] = 255
     return c
 
 raw_data_path = './raw_data'
@@ -56,7 +56,7 @@ for product in sorted(os.listdir(raw_data_path)):
                     segmentation = Image.open(f'./dataset/images/segmentation/{product}/{color}/{poses}')
                     upper_clothes_mask = filter_upper_clothes(segmentation)
                     os.makedirs(f'./dataset/images/mask/{product}/{color}', exist_ok=True)
-                    cv2.imwrite(f'./dataset/images/mask/{product}/{color}/{poses}_mask.png', upper_clothes_mask)
+                    cv2.imwrite(f'./dataset/images/mask/{product}/{color}/{poses[:-4]}_mask.png', upper_clothes_mask)
 
 
                     

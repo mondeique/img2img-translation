@@ -255,10 +255,17 @@ class ResnetSetGenerator(nn.Module):
             use_bias = norm_layer == nn.InstanceNorm2d
 
         n_downsampling = 2
+        # self.encoder_img = self.get_encoder(input_nc, n_downsampling, ngf, norm_layer, use_dropout, n_blocks, padding_type, use_bias)
+        # self.encoder_seg = self.get_encoder(1, n_downsampling, ngf, norm_layer, use_dropout, n_blocks, padding_type, use_bias)
+        # self.decoder_img = self.get_decoder(output_nc, n_downsampling, 2 * ngf, norm_layer, use_bias)  # 2*ngf
+        # self.decoder_seg = self.get_decoder(1, n_downsampling, 3 * ngf, norm_layer, use_bias)  # 3*ngf
+
         self.encoder_img = self.get_encoder(input_nc, n_downsampling, ngf, norm_layer, use_dropout, n_blocks, padding_type, use_bias)
-        self.encoder_seg = self.get_encoder(1, n_downsampling, ngf, norm_layer, use_dropout, n_blocks, padding_type, use_bias)
-        self.decoder_img = self.get_decoder(output_nc, n_downsampling, 2 * ngf, norm_layer, use_bias)  # 2*ngf
-        self.decoder_seg = self.get_decoder(1, n_downsampling, 3 * ngf, norm_layer, use_bias)  # 3*ngf
+        self.encoder_cloth = self.get_encoder(input_nc, n_downsampling, ngf, norm_layer, use_dropout, n_blocks, padding_type, use_bias)
+        self.encoder_input_cloth = self.get_encoder(input_nc, n_downsampling, ngf, norm_layer, use_dropout, n_blocks, padding_type, use_bias)
+        self.decoder_img = self.get_decoder(output_nc, n_downsampling, ngf, norm_layer, use_bias)  # 2*ngf
+        self.decoder_cloth = self.get_decoder(output_nc, n_downsampling, ngf, norm_layer, use_bias)  # 2*ngf
+        self.decoder_input_cloth = self.get_decoder(output_nc, n_downsampling, ngf, norm_layer, use_bias)  # 2*ngf
 
     def get_encoder(self, input_nc, n_downsampling, ngf, norm_layer, use_dropout, n_blocks, padding_type, use_bias):
         model = [nn.ReflectionPad2d(3),
@@ -293,34 +300,40 @@ class ResnetSetGenerator(nn.Module):
     def forward(self, inp):
         # split data
         img = inp[:, :self.input_nc, :, :]  # (B, CX, W, H)
-        segs = inp[:, self.input_nc:, :, :]  # (B, CA, W, H)
-        mean = (segs + 1).mean(0).mean(-1).mean(-1)
-        if mean.sum() == 0:
-            mean[0] = 1  # forward at least one segmentation
+        cloth = inp[:, self.input_nc:self.input_nc * 2, :, :]
+        input_cloth = inp[:, self.input_nc * 2:self.input_nc * 3, :, :]
+        # segs = inp[:, self.input_nc:, :, :]  # (B, CA, W, H)
+        # mean = (segs + 1).mean(0).mean(-1).mean(-1)
+        # if mean.sum() == 0:
+        #     mean[0] = 1  # forward at least one segmentation
 
         # run encoder
         enc_img = self.encoder_img(img)
-        enc_segs = list()
-        for i in range(segs.size(1)):
-            if mean[i] > 0:  # skip empty segmentation
-                seg = segs[:, i, :, :].unsqueeze(1)
-                enc_segs.append(self.encoder_seg(seg))
-        enc_segs = torch.cat(enc_segs)
-        enc_segs_sum = torch.sum(enc_segs, dim=0, keepdim=True)  # aggregated set feature
+        enc_cloth = self.encoder_cloth(cloth)
+        enc_input_cloth = self.encoder_input_cloth(input_cloth)
+        # enc_segs = list()
+        # for i in range(segs.size(1)):
+        #     if mean[i] > 0:  # skip empty segmentation
+        #         seg = segs[:, i, :, :].unsqueeze(1)
+        #         enc_segs.append(self.encoder_seg(seg))
+        # enc_segs = torch.cat(enc_segs)
+        # enc_segs_sum = torch.sum(enc_segs, dim=0, keepdim=True)  # aggregated set feature
 
         # run decoder
-        feat = torch.cat([enc_img, enc_segs_sum], dim=1)
-        out = [self.decoder_img(feat)]
-        idx = 0
-        for i in range(segs.size(1)):
-            if mean[i] > 0:
-                enc_seg = enc_segs[idx].unsqueeze(0)  # (1, ngf, w, h)
-                idx += 1  # move to next index
-                feat = torch.cat([enc_seg, enc_img, enc_segs_sum], dim=1)
-                out += [self.decoder_seg(feat)]
-            else:
-                out += [segs[:, i, :, :].unsqueeze(1)]  # skip empty segmentation
-        return torch.cat(out, dim=1)
+        # feat = torch.cat([enc_img, enc_segs_sum], dim=1)
+        out_image = self.decoder_img(enc_img)
+        out_cloth = self.decoder_cloth(enc_cloth)
+        out_input_cloth = self.decoder_input_cloth(enc_input_cloth)
+        # idx = 0
+        # for i in range(segs.size(1)):
+        #     if mean[i] > 0:
+        #         enc_seg = enc_segs[idx].unsqueeze(0)  # (1, ngf, w, h)
+        #         idx += 1  # move to next index
+        #         feat = torch.cat([enc_seg, enc_img, enc_segs_sum], dim=1)
+        #         out += [self.decoder_seg(feat)]
+        #     else:
+        #         out += [segs[:, i, :, :].unsqueeze(1)]  # skip empty segmentation
+        return torch.cat([out_image], dim=1)
 
 
 # Define a resnet block
@@ -510,7 +523,7 @@ class NLayerSetDiscriminator(nn.Module):
         kw = 4
         padw = 1
         self.feature_img = self.get_feature_extractor(input_nc, ndf, n_layers, kw, padw, norm_layer, use_bias)
-        self.feature_seg = self.get_feature_extractor(1, ndf, n_layers, kw, padw, norm_layer, use_bias)
+        # self.feature_seg = self.get_feature_extractor(1, ndf, n_layers, kw, padw, norm_layer, use_bias)
         self.classifier = self.get_classifier(2 * ndf, n_layers, kw, padw, norm_layer, use_sigmoid)  # 2*ndf
 
     def get_feature_extractor(self, input_nc, ndf, n_layers, kw, padw, norm_layer, use_bias):
@@ -550,23 +563,23 @@ class NLayerSetDiscriminator(nn.Module):
     def forward(self, inp):
         # split data
         img = inp[:, :self.input_nc, :, :]  # (B, CX, W, H)
-        segs = inp[:, self.input_nc:, :, :]  # (B, CA, W, H)
-        mean = (segs + 1).mean(0).mean(-1).mean(-1)
-        if mean.sum() == 0:
-            mean[0] = 1  # forward at least one segmentation
+        # segs = inp[:, self.input_nc:, :, :]  # (B, CA, W, H)
+        # mean = (segs + 1).mean(0).mean(-1).mean(-1)
+        # if mean.sum() == 0:
+        #     mean[0] = 1  # forward at least one segmentation
 
         # run feature extractor
         feat_img = self.feature_img(img)
-        feat_segs = list()
-        for i in range(segs.size(1)):
-            if mean[i] > 0:  # skip empty segmentation
-                seg = segs[:, i, :, :].unsqueeze(1)
-                feat_segs.append(self.feature_seg(seg))
-        feat_segs_sum = torch.sum(torch.stack(feat_segs), dim=0)  # aggregated set feature
+        # feat_segs = list()
+        # for i in range(segs.size(1)):
+        #     if mean[i] > 0:  # skip empty segmentation
+        #         seg = segs[:, i, :, :].unsqueeze(1)
+        #         feat_segs.append(self.feature_seg(seg))
+        # feat_segs_sum = torch.sum(torch.stack(feat_segs), dim=0)  # aggregated set feature
 
         # run classifier
-        feat = torch.cat([feat_img, feat_segs_sum], dim=1)
-        out = self.classifier(feat)
+        # feat = torch.cat([feat_img, feat_segs_sum], dim=1)
+        out = self.classifier(feat_img)
         return out
 
 

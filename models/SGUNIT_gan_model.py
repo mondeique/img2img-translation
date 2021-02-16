@@ -25,18 +25,18 @@ class SGUNITGANModel(BaseModel):
         BaseModel.initialize(self, opt)
 
         # specify the training losses you want to print out. The program will call base_model.get_current_losses
-        self.loss_names = ['D_A', 'G_A', 'cycle_A', 'idt_A', 'D_B', 'G_B', 'cycle_B', 'idt_B', 'sty']
+        self.loss_names = ['D_A', 'G_A', 'cycle_A', 'G_B']
         # specify the images you want to save/display. The program will call base_model.get_current_visuals
         visual_names_A = ['real_A', 'fake_B', 'rec_A']
         visual_names_B = ['real_B', 'fake_A', 'rec_B']
-        if self.isTrain and self.opt.lambda_identity > 0.0:
-            visual_names_A.append('idt_A')
-            visual_names_B.append('idt_B')
+        # if self.isTrain and self.opt.lambda_identity > 0.0:
+        #     visual_names_A.append('idt_A')
+        #     visual_names_B.append('idt_B')
 
         self.visual_names = visual_names_A + visual_names_B
         # specify the models you want to save to the disk. The program will call base_model.save_networks and base_model.load_networks
         if self.isTrain:
-            self.model_names = ['G_A', 'G_B', 'D_A', 'D_B']
+            self.model_names = ['G_A', 'G_B', 'D_A']
         else:  # during test time, only load Gs
             self.model_names = ['G_A', 'G_B']
 
@@ -62,7 +62,7 @@ class SGUNITGANModel(BaseModel):
             self.criterionGAN = networks.GANLoss(use_lsgan=not opt.no_lsgan).to(self.device)
             self.criterionCycle = torch.nn.L1Loss()
             self.criterionIdt = torch.nn.L1Loss()
-            self.criterionSty = StyleLoss()
+            # self.criterionSty = StyleLoss()
             # initialize optimizers
             self.optimizer_G = torch.optim.Adam(itertools.chain(self.netG_A.parameters(), self.netG_B.parameters()),
                                                 lr=opt.lr, betas=(opt.beta1, 0.999))
@@ -86,8 +86,8 @@ class SGUNITGANModel(BaseModel):
         self.image_mask = self.real_image.mul(self.real_image_mask)
         self.cloth_mask = self.real_cloth.mul(self.real_cloth_mask)
         self.input_mask = self.input_cloth.mul(self.input_cloth_mask)
-        self.fake_image = self.netG_A(self.real_image, self.real_cloth, self.input_cloth)
-        self.rec_image = self.netG_B(self.real_cloth, self.input_cloth, self.fake_image)
+        self.fake_image = self.netG_A(torch.cat([self.real_image, self.real_cloth, self.input_cloth], dim=1))
+        self.rec_image = self.netG_B(torch.cat([self.fake_image, self.real_cloth, self.input_cloth], dim=1))
 
         # self.fake_A = self.netG_B(self.real_B)
         # self.rec_B = self.netG_A(self.fake_A)
@@ -129,8 +129,8 @@ class SGUNITGANModel(BaseModel):
         #    self.loss_idt_A = 0
         #    self.loss_idt_B = 0
         # Style loss
-        self.loss_sty = StyleLoss(self.real_image) - StyleLoss(self.image_mask) - StyleLoss(self.real_cloth) - StyleLoss(self.cloth_mask)
-        + StyleLoss(self.real_image) - StyleLoss(self.real_cloth) - StyleLoss(self.image_mask) - StyleLoss(self.cloth_mask)
+        # self.loss_sty = StyleLoss(self.real_image) - StyleLoss(self.image_mask) - StyleLoss(self.real_cloth) - StyleLoss(self.cloth_mask)
+        # + StyleLoss(self.real_image) - StyleLoss(self.real_cloth) - StyleLoss(self.image_mask) - StyleLoss(self.cloth_mask)
 
         # GAN loss D_A(G_A(A))
         self.loss_G_A = self.criterionGAN(self.netD_A(self.fake_image), True)
@@ -142,7 +142,7 @@ class SGUNITGANModel(BaseModel):
         # self.loss_cycle_B = self.criterionCycle(self.rec_B, self.real_B) * lambda_B
 
         # combined loss
-        self.loss_G = self.loss_G_A + self.loss_G_B + self.loss_cycle_A + self.loss_sty
+        self.loss_G = self.loss_G_A + self.loss_G_B + self.loss_cycle_A
         self.loss_G.backward()
 
     def optimize_parameters(self):
