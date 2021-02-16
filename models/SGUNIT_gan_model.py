@@ -27,7 +27,7 @@ class SGUNITGANModel(BaseModel):
         # specify the training losses you want to print out. The program will call base_model.get_current_losses
         self.loss_names = ['D_A', 'G_A', 'cycle_A']
         # specify the images you want to save/display. The program will call base_model.get_current_visuals
-        visual_names_A = ['real_A', 'fake_B', 'rec_A']
+        visual_names_A = ['real_image', 'fake_image', 'rec_image']
         # visual_names_B = ['real_B', 'fake_A', 'rec_B']
         # if self.isTrain and self.opt.lambda_identity > 0.0:
             # visual_names_A.append('idt_A')
