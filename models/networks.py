@@ -263,9 +263,9 @@ class ResnetSetGenerator(nn.Module):
         self.encoder_img = self.get_encoder(input_nc, n_downsampling, ngf, norm_layer, use_dropout, n_blocks, padding_type, use_bias)
         self.encoder_cloth = self.get_encoder(input_nc, n_downsampling, ngf, norm_layer, use_dropout, n_blocks, padding_type, use_bias)
         self.encoder_input_cloth = self.get_encoder(input_nc, n_downsampling, ngf, norm_layer, use_dropout, n_blocks, padding_type, use_bias)
-        self.decoder_img = self.get_decoder(output_nc, n_downsampling, ngf, norm_layer, use_bias)  # 2*ngf
-        self.decoder_cloth = self.get_decoder(output_nc, n_downsampling, ngf, norm_layer, use_bias)  # 2*ngf
-        self.decoder_input_cloth = self.get_decoder(output_nc, n_downsampling, ngf, norm_layer, use_bias)  # 2*ngf
+        self.decoder_img = self.get_decoder(output_nc, n_downsampling, 3 * ngf, norm_layer, use_bias)  # 2*ngf
+        self.decoder_cloth = self.get_decoder(output_nc, n_downsampling, 3 * ngf, norm_layer, use_bias)  # 2*ngf
+        self.decoder_input_cloth = self.get_decoder(output_nc, n_downsampling, 3 * ngf, norm_layer, use_bias)  # 2*ngf
 
     def get_encoder(self, input_nc, n_downsampling, ngf, norm_layer, use_dropout, n_blocks, padding_type, use_bias):
         model = [nn.ReflectionPad2d(3),
@@ -320,10 +320,13 @@ class ResnetSetGenerator(nn.Module):
         # enc_segs_sum = torch.sum(enc_segs, dim=0, keepdim=True)  # aggregated set feature
 
         # run decoder
-        # feat = torch.cat([enc_img, enc_segs_sum], dim=1)
-        out_image = self.decoder_img(enc_img)
-        out_cloth = self.decoder_cloth(enc_cloth)
-        out_input_cloth = self.decoder_input_cloth(enc_input_cloth)
+        feat_img = torch.cat([enc_img, enc_cloth, enc_input_cloth], dim=1)
+        out_image = self.decoder_img(feat_img)
+        # feat_cloth = torch.cat([enc_img, enc_cloth, enc_input_cloth], dim=1)
+        # out_cloth = self.decoder_cloth(feat_cloth)
+        # feat = torch.cat([enc_img, enc_cloth, enc_input_cloth], dim=1)
+        # out_input_cloth = self.decoder_input_cloth(feat)
+        out = [out_image]
         # idx = 0
         # for i in range(segs.size(1)):
         #     if mean[i] > 0:
@@ -333,7 +336,7 @@ class ResnetSetGenerator(nn.Module):
         #         out += [self.decoder_seg(feat)]
         #     else:
         #         out += [segs[:, i, :, :].unsqueeze(1)]  # skip empty segmentation
-        return torch.cat([out_image], dim=1)
+        return torch.cat(out, dim=1)
 
 
 # Define a resnet block
@@ -523,6 +526,7 @@ class NLayerSetDiscriminator(nn.Module):
         kw = 4
         padw = 1
         self.feature_img = self.get_feature_extractor(input_nc, ndf, n_layers, kw, padw, norm_layer, use_bias)
+        self.feature_cloth = self.get_feature_extractor(input_nc, ndf, n_layers, kw, padw, norm_layer, use_bias)
         # self.feature_seg = self.get_feature_extractor(1, ndf, n_layers, kw, padw, norm_layer, use_bias)
         self.classifier = self.get_classifier(2 * ndf, n_layers, kw, padw, norm_layer, use_sigmoid)  # 2*ndf
 
@@ -563,6 +567,7 @@ class NLayerSetDiscriminator(nn.Module):
     def forward(self, inp):
         # split data
         img = inp[:, :self.input_nc, :, :]  # (B, CX, W, H)
+        cloth = inp[:, self.input_nc:self.input_nc * 2, :, :]
         # segs = inp[:, self.input_nc:, :, :]  # (B, CA, W, H)
         # mean = (segs + 1).mean(0).mean(-1).mean(-1)
         # if mean.sum() == 0:
@@ -570,6 +575,7 @@ class NLayerSetDiscriminator(nn.Module):
 
         # run feature extractor
         feat_img = self.feature_img(img)
+        feat_cloth = self.feature_cloth(cloth)
         # feat_segs = list()
         # for i in range(segs.size(1)):
         #     if mean[i] > 0:  # skip empty segmentation
@@ -579,7 +585,8 @@ class NLayerSetDiscriminator(nn.Module):
 
         # run classifier
         # feat = torch.cat([feat_img, feat_segs_sum], dim=1)
-        out = self.classifier(feat_img)
+        feat = torch.cat([feat_img, feat_cloth], dim=1)
+        out = self.classifier(feat)
         return out
 
 
