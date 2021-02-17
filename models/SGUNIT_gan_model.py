@@ -27,7 +27,7 @@ class SGUNITGANModel(BaseModel):
         # specify the training losses you want to print out. The program will call base_model.get_current_losses
         self.loss_names = ['D_A', 'G_A', 'cycle_A']
         # specify the images you want to save/display. The program will call base_model.get_current_visuals
-        visual_names_A = ['real_image', 'fake_image', 'rec_image']
+        visual_names_A = ['real_image', 'real_image_mask', 'image_mask', 'fake_image', 'rec_image']
         # visual_names_B = ['real_B', 'fake_A', 'rec_B']
         # if self.isTrain and self.opt.lambda_identity > 0.0:
             # visual_names_A.append('idt_A')
@@ -86,8 +86,8 @@ class SGUNITGANModel(BaseModel):
         self.image_mask = self.real_image.mul(self.real_image_mask)
         self.cloth_mask = self.real_cloth.mul(self.real_cloth_mask)
         self.input_mask = self.input_cloth.mul(self.input_cloth_mask)
-        self.fake_image = self.netG_A(torch.cat([self.real_image, self.real_cloth, self.input_cloth], dim=1))
-        self.rec_image = self.netG_A(torch.cat([self.fake_image, self.real_cloth, self.input_cloth], dim=1))
+        self.fake_image = self.netG_A(torch.cat([self.image_mask, self.real_cloth, self.input_cloth], dim=1))
+        self.rec_image = self.netG_A(torch.cat([self.fake_image, self.input_cloth, self.real_cloth], dim=1))
 
         # self.fake_A = self.netG_B(self.real_B)
         # self.rec_B = self.netG_A(self.fake_A)
@@ -107,7 +107,7 @@ class SGUNITGANModel(BaseModel):
 
     def backward_D_A(self):
         rec_image = self.fake_B_pool.query(self.rec_image)
-        self.loss_D_A = self.backward_D_basic(self.netD_A, self.real_cloth, self.real_image, rec_image)
+        self.loss_D_A = self.backward_D_basic(self.netD_A, self.real_cloth, self.image_mask, rec_image)
 
     # def backward_D_B(self):
     #     fake_A = self.fake_A_pool.query(self.fake_A)
@@ -137,7 +137,7 @@ class SGUNITGANModel(BaseModel):
         # # GAN loss D_B(G_B(B))
         # self.loss_G_B = self.criterionGAN(self.netD_B(self.rec_image), True)
         # Forward cycle loss
-        self.loss_cycle_A = self.criterionCycle(self.real_image, self.rec_image) * lambda_A
+        self.loss_cycle_A = self.criterionCycle(self.image_mask, self.rec_image) * lambda_A
         # # Backward cycle loss
         # self.loss_cycle_B = self.criterionCycle(self.rec_B, self.real_B) * lambda_B
 
