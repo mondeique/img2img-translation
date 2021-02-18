@@ -27,7 +27,7 @@ class SGUNITGANModel(BaseModel):
         # specify the training losses you want to print out. The program will call base_model.get_current_losses
         self.loss_names = ['D_A', 'G_A', 'cycle_A']
         # specify the images you want to save/display. The program will call base_model.get_current_visuals
-        visual_names_A = ['real_image', 'real_image_mask', 'image_mask', 'fake_image', 'rec_image']
+        visual_names_A = ['real_image', 'image_mask', 'input_cloth', 'fake_image', 'rec_image']
         # visual_names_B = ['real_B', 'fake_A', 'rec_B']
         # if self.isTrain and self.opt.lambda_identity > 0.0:
             # visual_names_A.append('idt_A')
@@ -92,22 +92,27 @@ class SGUNITGANModel(BaseModel):
         # self.fake_A = self.netG_B(self.real_B)
         # self.rec_B = self.netG_A(self.fake_A)
 
-    def backward_D_basic(self, netD, cloth, real, fake):
+    def backward_D_basic(self, netD, base_cloth, input_cloth, real_image, rec_image, real_image_mask):
         # Real
-        pred_real = netD(torch.cat([cloth, real], dim=1))
+        pred_real = netD(torch.cat([real_image.detach(), base_cloth, real_image_mask], dim=1))
         loss_D_real = self.criterionGAN(pred_real, True)
         # Fake
-        pred_fake = netD(torch.cat([cloth, fake.detach()], dim=1))
+        pred_fake = netD(torch.cat([real_image.detach(), input_cloth, real_image_mask], dim=1))
         loss_D_fake = self.criterionGAN(pred_fake, False)
+        # Rec
+        pred_rec = netD(torch.cat([rec_image.detach(), base_cloth, real_image_mask], dim=1))
+        loss_D_rec = self.criterionGAN(pred_rec, False)
         # Combined loss
-        loss_D = (loss_D_real + loss_D_fake) * 0.5
+        loss_D_pos = loss_D_real  * 0.5
+        loss_D_neg = (loss_D_rec + loss_D_fake) * 0.25
+        loss_D = loss_D_pos + loss_D_neg
         # backward
         loss_D.backward()
         return loss_D
 
     def backward_D_A(self):
         rec_image = self.fake_B_pool.query(self.rec_image)
-        self.loss_D_A = self.backward_D_basic(self.netD_A, self.real_cloth, self.image_mask, rec_image)
+        self.loss_D_A = self.backward_D_basic(self.netD_A, self.real_cloth, self.input_cloth,self.image_mask, rec_image, self.real_image_mask)
 
     # def backward_D_B(self):
     #     fake_A = self.fake_A_pool.query(self.fake_A)
@@ -133,7 +138,9 @@ class SGUNITGANModel(BaseModel):
         # + StyleLoss(self.real_image) - StyleLoss(self.real_cloth) - StyleLoss(self.image_mask) - StyleLoss(self.cloth_mask)
 
         # GAN loss D_A(G_A(A))
-        self.loss_G_A = self.criterionGAN(self.netD_A(torch.cat([self.fake_image, self.real_cloth], dim=1)), True)
+        self.loss_G_A_1 = self.criterionGAN(self.netD_A(torch.cat([self.fake_image, self.input_cloth, self.real_image_mask], dim=1)), True)
+        self.loss_G_A_2 = self.criterionGAN(self.netD_A(torch.cat([self.rec_image, self.real_cloth, self.real_image_mask], dim=1)), True)
+        self.loss_G_A = (self.loss_G_A_1 + self.loss_G_A_2) / 2
         # # GAN loss D_B(G_B(B))
         # self.loss_G_B = self.criterionGAN(self.netD_B(self.rec_image), True)
         # Forward cycle loss

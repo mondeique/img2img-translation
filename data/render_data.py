@@ -6,9 +6,8 @@
 #                                            -images(folder)--XXX.jpg
 #                                                           --XXX.jpg
 ###################################################
-import os
-
 import numpy as np
+import os
 
 # import util.bg_remover.bg_remover as bg_remover
 import cv2
@@ -25,8 +24,13 @@ def get_mask(image):
 
 def filter_upper_clothes(image):
     image_array = np.asarray(image)
-    b = (image_array == 5)
-    c = b.astype(int)
+    b_1 = (image_array == 5)
+    b_2 = (image_array == 6)
+    b_3 = (image_array == 7)
+    c_1 = b_1.astype(int)
+    c_2 = b_2.astype(int)
+    c_3 = b_3.astype(int)
+    c = c_1 + c_2 + c_3
     c[c != 1] = 0
     c[c == 1] = 255
     return c
@@ -49,7 +53,7 @@ for product in sorted(os.listdir(raw_data_path)):
                 images_path = os.path.join(color_path, name)
                 os.makedirs(f'./dataset/images/base/{product}/{color}', exist_ok=True)
                 os.system(
-                    f"/home/ubuntu/anaconda3/envs/human-parser/bin/python /home/ubuntu/Desktop/human-parser/simple_extractor.py --dataset 'lip' --model-restore '/home/ubuntu/Desktop/human-parser/checkpoints/exp-schp-201908261155-lip.pth' --input-dir {images_path} --output-dir './dataset/images/segmentation/{product}/{color}'")
+                    f"python /home/ubuntu/Desktop/human-parser/simple_extractor.py --dataset 'lip' --model-restore '/home/ubuntu/Desktop/human-parser/checkpoints/exp-schp-201908261155-lip.pth' --input-dir {images_path} --output-dir './dataset/images/segmentation/{product}/{color}'")
                 for poses in sorted(os.listdir(images_path)):
                     copyfile(os.path.join(images_path, poses), f'./dataset/images/base/{product}/{color}/{poses}')
                 for poses in sorted(os.listdir(f'./dataset/images/segmentation/{product}/{color}')):

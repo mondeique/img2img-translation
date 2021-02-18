@@ -527,8 +527,9 @@ class NLayerSetDiscriminator(nn.Module):
         padw = 1
         self.feature_img = self.get_feature_extractor(input_nc, ndf, n_layers, kw, padw, norm_layer, use_bias)
         self.feature_cloth = self.get_feature_extractor(input_nc, ndf, n_layers, kw, padw, norm_layer, use_bias)
+        self.feature_img_mask = self.get_feature_extractor(1, ndf, n_layers, kw, padw, norm_layer, use_bias)
         # self.feature_seg = self.get_feature_extractor(1, ndf, n_layers, kw, padw, norm_layer, use_bias)
-        self.classifier = self.get_classifier(2 * ndf, n_layers, kw, padw, norm_layer, use_sigmoid)  # 2*ndf
+        self.classifier = self.get_classifier(3 * ndf, n_layers, kw, padw, norm_layer, use_sigmoid)  # 3*ndf
 
     def get_feature_extractor(self, input_nc, ndf, n_layers, kw, padw, norm_layer, use_bias):
         model = [
@@ -568,6 +569,7 @@ class NLayerSetDiscriminator(nn.Module):
         # split data
         img = inp[:, :self.input_nc, :, :]  # (B, CX, W, H)
         cloth = inp[:, self.input_nc:self.input_nc * 2, :, :]
+        img_mask = inp[:, self.input_nc * 2, :, :].unsqueeze(dim=1)
         # segs = inp[:, self.input_nc:, :, :]  # (B, CA, W, H)
         # mean = (segs + 1).mean(0).mean(-1).mean(-1)
         # if mean.sum() == 0:
@@ -576,6 +578,7 @@ class NLayerSetDiscriminator(nn.Module):
         # run feature extractor
         feat_img = self.feature_img(img)
         feat_cloth = self.feature_cloth(cloth)
+        feat_mask = self.feature_img_mask(img_mask)
         # feat_segs = list()
         # for i in range(segs.size(1)):
         #     if mean[i] > 0:  # skip empty segmentation
@@ -585,7 +588,7 @@ class NLayerSetDiscriminator(nn.Module):
 
         # run classifier
         # feat = torch.cat([feat_img, feat_segs_sum], dim=1)
-        feat = torch.cat([feat_img, feat_cloth], dim=1)
+        feat = torch.cat([feat_img, feat_cloth, feat_mask], dim=1)
         out = self.classifier(feat)
         return out
 

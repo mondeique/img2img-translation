@@ -1,5 +1,7 @@
 import os.path
 import random
+
+import numpy
 import torchvision.transforms as transforms
 import torch
 from data.base_dataset import BaseDataset
@@ -21,7 +23,7 @@ class sgunittraindataset(BaseDataset):
             # components = [root,images,base,pXXX,cXXX,XXX]
             base_cloth_path = os.path.join(self.dir_clothes, 'base',components[-3])
             for color in os.listdir(base_cloth_path):
-                if color[:-4] != components[-2]:
+                if color != components[-2]:
                     path_bundles.append({
                         'base_image' : base_path,
                         'base_image_mask' : os.path.join(self.root, 'images', 'mask', components[-3], components[-2], components[-1][:-4] + '_mask.png'),
@@ -65,7 +67,10 @@ class sgunittraindataset(BaseDataset):
                 new_image = util.expand2square(image, 0)
             else:
                 image = Image.open(image).convert("RGB")
-                new_image = util.expand2square(image, 255)
+                if 'cloth' in key :
+                    new_image = util.expand2square(image, 0)
+                else:
+                    new_image = util.expand2square(image, 255)
             new_image = new_image.resize((self.opt.loadSize, self.opt.loadSize), Image.LANCZOS)
             new_image = transforms.ToTensor()(new_image)
             resized_image_dict[key] = new_image
